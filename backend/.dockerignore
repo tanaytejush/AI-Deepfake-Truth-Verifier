@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pyc
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Build
+*.egg-info/
+dist/
+build/
+
+# Local data (will use Docker volumes instead)
+*.db
+*.sqlite
+deepfake_detector.db
+
+# Model cache (will use Docker volumes instead)
+models/cache/
+
+# Uploads
+uploads/
+
+# Training data (not needed in production image)
+train/
+data/
+
+# Logs
+*.log
+logs/
+
+# Documentation
+*.md
+docs/
+
+# Git
+.git/
+.gitignore
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.docker/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.bak

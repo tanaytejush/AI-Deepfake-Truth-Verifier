@@ -1,0 +1,5 @@
+# Training dependencies (in addition to main requirements.txt)
+datasets>=2.14.0
+evaluate>=0.4.0
+scikit-learn>=1.3.0
+accelerate>=0.24.0

@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  # Backend API Service
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: deepfake-backend
+    restart: unless-stopped
+    environment:
+      - DEBUG=False
+      - API_V1_PREFIX=/api/v1
+      - MODEL_NAME=dima806/deepfake_vs_real_image_detection
+      - MODEL_CACHE_DIR=/app/models/cache
+      - DATABASE_URL=sqlite:///./data/deepfake_detector.db
+      - USE_GPU=False
+      - BATCH_SIZE=1
+      - NUM_WORKERS=2
+      - BACKEND_CORS_ORIGINS=["http://localhost","http://localhost:3000","http://localhost:80"]
+    volumes:
+      # Persist model cache to avoid re-downloading
+      - model_cache:/app/models/cache
+      # Persist database
+      - db_data:/app/data
+      # Persist uploads (if needed)
+      - uploads:/app/uploads
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    networks:
+      - deepfake-network
+
+  # Frontend Web Service
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8000
+    container_name: deepfake-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+    networks:
+      - deepfake-network
+
+# Named volumes for data persistence
+volumes:
+  model_cache:
+    name: deepfake-model-cache
+  db_data:
+    name: deepfake-db-data
+  uploads:
+    name: deepfake-uploads
+
+# Custom network
+networks:
+  deepfake-network:
+    name: deepfake-network
+    driver: bridge
