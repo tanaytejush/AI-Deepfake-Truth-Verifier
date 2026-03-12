@@ -42,7 +42,7 @@ export default function Header() {
               background:'linear-gradient(90deg,#60a5fa,#a78bfa,#f472b6)',
               WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent',
               backgroundClip:'text' }}>
-              AI Deepfake Detector
+              AI-based Image Authenticity Verification System
             </h1>
             <p style={{ margin:0, fontSize:11, color:'#4b5563',
               letterSpacing:'0.12em', textTransform:'uppercase' }}>

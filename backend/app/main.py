@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
-    description="AI-powered deepfake detection API"
+    description="AI-based image authenticity verification API"
 )
 
 # CORS middleware
@@ -50,7 +50,7 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @app.on_event("startup")
 async def startup_event():
     """Initialize model on startup"""
-    logger.info("🚀 Starting AI Deepfake Truth Verifier API")
+    logger.info("🚀 Starting AI-based Image Authenticity Verification System API")
     logger.info(f"📍 Environment: {'Development' if settings.DEBUG else 'Production'}")
 
     try:
@@ -83,7 +83,7 @@ async def shutdown_event():
 async def root():
     """Root endpoint"""
     return {
-        "message": "AI Deepfake Truth Verifier API",
+        "message": "AI-based Image Authenticity Verification System API",
         "version": settings.VERSION,
         "status": "online",
         "docs": "/docs"
