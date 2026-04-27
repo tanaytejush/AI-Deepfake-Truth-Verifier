@@ -5,6 +5,7 @@ Configuration settings for the application
 from pydantic_settings import BaseSettings
 from pathlib import Path
 from functools import lru_cache
+from typing import List
 
 
 class Settings(BaseSettings):
@@ -79,11 +80,18 @@ class Settings(BaseSettings):
 
     # Security
     ADMIN_CLEAR_TOKEN: str = ""
+    ADMIN_CLEAR_TOKENS: List[str] = []
+    ADMIN_AUTH_MODE: str = "token"  # token | jwt | hybrid
+    JWT_SECRET_KEY: str = ""
+    JWT_ALGORITHM: str = "HS256"
+    ADMIN_JWT_ALLOWED_ROLES: List[str] = ["admin"]
 
     # Rate limiting (per client IP per endpoint)
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_IMAGE_PER_WINDOW: int = 20
     RATE_LIMIT_VIDEO_PER_WINDOW: int = 5
+    RATE_LIMIT_BACKEND: str = "memory"  # memory | redis
+    REDIS_URL: str = "redis://localhost:6379/0"
 
     class Config:
         env_file = ".env"

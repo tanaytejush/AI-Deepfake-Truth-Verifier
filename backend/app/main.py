@@ -19,6 +19,7 @@ from .ml.model_loader import get_model, ModelLoader
 from .database import get_db, SessionLocal, Prediction, init_db
 from .video_processor import VideoProcessor, save_upload_to_temp, cleanup_temp_file
 from .rate_limiter import rate_limiter
+from .auth import require_admin_access
 from sqlalchemy.orm import Session
 
 # Setup logging
@@ -237,18 +238,6 @@ def _enforce_rate_limit(request: Request, route_key: str, max_requests: int) -> 
             ),
             headers={"Retry-After": str(retry_after)},
         )
-
-
-def _require_admin_clear_token(token: Optional[str]) -> None:
-    configured_token = settings.ADMIN_CLEAR_TOKEN.strip()
-    if not configured_token:
-        raise HTTPException(
-            status_code=503,
-            detail="Clear endpoint is disabled. Configure ADMIN_CLEAR_TOKEN.",
-        )
-
-    if token != configured_token:
-        raise HTTPException(status_code=401, detail="Invalid admin token")
 
 
 @app.post("/api/v1/predict")
@@ -540,10 +529,11 @@ async def get_statistics(db: Session = Depends(get_db)):
 async def clear_predictions(
     db: Session = Depends(get_db),
     x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+    authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ):
     """Clear all predictions (use with caution)"""
     try:
-        _require_admin_clear_token(x_admin_token)
+        require_admin_access(x_admin_token, authorization)
         count = db.query(Prediction).delete()
         db.commit()
 

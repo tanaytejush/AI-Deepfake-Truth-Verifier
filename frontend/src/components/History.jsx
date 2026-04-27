@@ -40,7 +40,9 @@ function History() {
       })
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}))
-        throw new Error(errorPayload?.detail || 'Failed to clear history')
+        const requestId = response.headers.get('X-Request-ID')
+        const detail = errorPayload?.detail || 'Failed to clear history'
+        throw new Error(requestId ? `${detail} (Req: ${requestId})` : detail)
       }
       setPredictions([])
       toast.success('History cleared')

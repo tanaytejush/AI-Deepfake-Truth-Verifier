@@ -107,6 +107,10 @@ def client(db_session, monkeypatch):
 
     monkeypatch.setattr(app_main, "get_model", lambda: MockModel())
     app_main.settings.ADMIN_CLEAR_TOKEN = "test-clear-token"
+    app_main.settings.ADMIN_CLEAR_TOKENS = []
+    app_main.settings.ADMIN_AUTH_MODE = "token"
+    app_main.settings.JWT_SECRET_KEY = ""
+    app_main.settings.ADMIN_JWT_ALLOWED_ROLES = ["admin"]
     app_main.settings.RATE_LIMIT_IMAGE_PER_WINDOW = 1000
     app_main.settings.RATE_LIMIT_VIDEO_PER_WINDOW = 1000
 

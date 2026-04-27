@@ -28,3 +28,7 @@ pydantic-settings>=2.0.0
 
 # Caching (optional)
 cachetools>=5.3.0
+
+# Security and infra
+redis>=5.0.0
+PyJWT>=2.8.0

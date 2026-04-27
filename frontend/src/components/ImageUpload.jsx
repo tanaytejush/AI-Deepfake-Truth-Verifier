@@ -56,7 +56,9 @@ export default function ImageUpload({ setResult, loading, setLoading, analyzeRef
       if (!err.response) {
         toast.error('Backend offline — run: uvicorn app.main:app --port 8001')
       } else {
-        toast.error(err.response?.data?.detail || 'Analysis failed')
+        const requestId = err.response?.headers?.['x-request-id']
+        const detail = err.response?.data?.detail || 'Analysis failed'
+        toast.error(requestId ? `${detail} (Req: ${requestId})` : detail)
       }
     } finally {
       setLoading(false)

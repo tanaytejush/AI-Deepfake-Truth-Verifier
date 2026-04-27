@@ -4,6 +4,8 @@ API Endpoint Tests for Deepfake Detector Backend
 
 import pytest
 from fastapi import status
+import jwt
+import app.main as app_main
 
 
 class TestRootEndpoint:
@@ -236,6 +238,23 @@ class TestClearPredictions:
         """Test clear predictions endpoint enforces admin token"""
         response = client.delete("/api/v1/predictions/clear")
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
+
+    def test_clear_predictions_accepts_jwt_in_hybrid_mode(self, client):
+        """Test clear predictions accepts JWT when auth mode is hybrid"""
+        app_main.settings.ADMIN_AUTH_MODE = "hybrid"
+        app_main.settings.JWT_SECRET_KEY = "test-secret"
+        app_main.settings.JWT_ALGORITHM = "HS256"
+        app_main.settings.ADMIN_JWT_ALLOWED_ROLES = ["admin"]
+
+        token = jwt.encode({"role": "admin"}, "test-secret", algorithm="HS256")
+        response = client.delete(
+            "/api/v1/predictions/clear",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        app_main.settings.ADMIN_AUTH_MODE = "token"
+        app_main.settings.JWT_SECRET_KEY = ""
 
 
 class TestIntegration:

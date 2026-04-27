@@ -54,9 +54,13 @@ npm run dev
 ## Security and Config
 
 - To protect clear-history endpoint (`DELETE /api/v1/predictions/clear`):
-  - Set `ADMIN_CLEAR_TOKEN` in `backend/.env`
+  - Token mode (default): set `ADMIN_CLEAR_TOKEN` (or `ADMIN_CLEAR_TOKENS`) in `backend/.env`
+  - JWT mode: set `ADMIN_AUTH_MODE=jwt`, `JWT_SECRET_KEY`, and `ADMIN_JWT_ALLOWED_ROLES`
+  - Hybrid mode: set `ADMIN_AUTH_MODE=hybrid` to allow either token or JWT
   - Optionally set `VITE_ADMIN_CLEAR_TOKEN` in `frontend/.env`
-- Rate limiting is enabled for prediction endpoints and is configurable in backend settings/env.
+- Rate limiting is enabled for prediction endpoints:
+  - Default backend is in-memory
+  - Optional Redis backend: set `RATE_LIMIT_BACKEND=redis` and `REDIS_URL`
 - Default local backend port is `8001`.
 
 ## Ensemble Models
