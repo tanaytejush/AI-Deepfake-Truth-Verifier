@@ -43,7 +43,10 @@ An AI-powered deepfake and synthetic image/video detection system built with Vis
 ### 1. Start the Backend
 ```bash
 cd backend
-PYTHONPATH="./venv/lib/python3.13/site-packages" python3.13 -m uvicorn app.main:app --host 0.0.0.0 --port 8001
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8001
 ```
 
 ### 2. Start the Frontend
@@ -54,6 +57,15 @@ npm run dev
 
 ### 3. Open the App
 Visit **http://localhost:3000**
+
+---
+
+## Operational Notes
+
+- Liveness: `GET /api/v1/health`
+- Readiness: `GET /api/v1/ready`
+- To enable protected history clearing, set `ADMIN_CLEAR_TOKEN` in `backend/.env`
+  and optionally `VITE_ADMIN_CLEAR_TOKEN` in `frontend/.env`.
 
 ---
 

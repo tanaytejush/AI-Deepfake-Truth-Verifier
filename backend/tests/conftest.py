@@ -20,6 +20,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, get_db
+import app.main as app_main
 
 
 # Create test database
@@ -31,6 +32,51 @@ engine = create_engine(
     poolclass=StaticPool,
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+class MockModel:
+    """Lightweight model stub for API tests."""
+
+    def warm_up(self):
+        return None
+
+    def clear_cache(self):
+        return None
+
+    def get_model_info(self):
+        return {
+            "model_name": "Ensemble",
+            "ensemble_models": ["mock/model"],
+            "ensemble_size": 1,
+            "is_fine_tuned": False,
+            "device": "cpu",
+            "is_loaded": True,
+            "cache_dir": "./models/cache",
+        }
+
+    def predict(self, image):
+        return {
+            "prediction": "REAL",
+            "confidence": 98.0,
+            "real_probability": 98.0,
+            "fake_probability": 2.0,
+            "fake_type": None,
+            "fake_type_detail": None,
+            "fake_tags": [],
+            "inference_time": 0.01,
+            "device": "cpu",
+            "ensemble_size": 1,
+            "models_used": ["mock/model"],
+            "per_model": [
+                {
+                    "model": "mock-model",
+                    "full_model": "mock/model",
+                    "fake_prob": 2.0,
+                    "real_prob": 98.0,
+                    "specialty": "Detection Model",
+                }
+            ],
+        }
 
 
 def override_get_db():
@@ -53,10 +99,16 @@ def db_session():
 
 
 @pytest.fixture(scope="function")
-def client(db_session):
+def client(db_session, monkeypatch):
     """Create a test client with database override"""
     Base.metadata.create_all(bind=engine)
     app.dependency_overrides[get_db] = override_get_db
+    app_main.rate_limiter.reset()
+
+    monkeypatch.setattr(app_main, "get_model", lambda: MockModel())
+    app_main.settings.ADMIN_CLEAR_TOKEN = "test-clear-token"
+    app_main.settings.RATE_LIMIT_IMAGE_PER_WINDOW = 1000
+    app_main.settings.RATE_LIMIT_VIDEO_PER_WINDOW = 1000
 
     with TestClient(app) as test_client:
         yield test_client

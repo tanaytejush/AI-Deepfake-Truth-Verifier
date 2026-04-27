@@ -58,7 +58,7 @@ class TestVideoProcessorAggregation:
         )
 
         assert result["prediction"] in ["REAL", "FAKE"]
-        assert 0 <= result["confidence"] <= 1
+        assert 0 <= result["confidence"] <= 100
         assert "real_probability" in result
         assert "fake_probability" in result
 

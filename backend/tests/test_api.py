@@ -24,6 +24,17 @@ class TestRootEndpoint:
         assert "status" in data
         assert data["status"] == "online"
 
+    def test_root_includes_request_id_header(self, client):
+        """Test middleware adds request ID header"""
+        response = client.get("/")
+        assert "X-Request-ID" in response.headers
+        assert response.headers["X-Request-ID"]
+
+    def test_root_preserves_incoming_request_id(self, client):
+        """Test middleware reuses caller-provided request ID"""
+        response = client.get("/", headers={"X-Request-ID": "test-request-id"})
+        assert response.headers.get("X-Request-ID") == "test-request-id"
+
 
 class TestHealthEndpoint:
     """Tests for health check endpoint"""
@@ -39,7 +50,25 @@ class TestHealthEndpoint:
         data = response.json()
 
         assert data["status"] == "healthy"
-        assert "model_loaded" in data
+        assert data["service"] == "api"
+        assert "timestamp" in data
+
+
+class TestReadinessEndpoint:
+    """Tests for readiness endpoint"""
+
+    def test_ready_returns_200(self, client):
+        """Test readiness endpoint returns 200"""
+        response = client.get("/api/v1/ready")
+        assert response.status_code == status.HTTP_200_OK
+
+    def test_ready_returns_expected_fields(self, client):
+        """Test readiness endpoint returns expected fields"""
+        response = client.get("/api/v1/ready")
+        data = response.json()
+
+        assert data["status"] == "ready"
+        assert data["model_loaded"] is True
         assert "device" in data
         assert "timestamp" in data
 
@@ -102,9 +131,9 @@ class TestImagePrediction:
         )
         data = response.json()
 
-        assert 0 <= data["confidence"] <= 1
-        assert 0 <= data["real_probability"] <= 1
-        assert 0 <= data["fake_probability"] <= 1
+        assert 0 <= data["confidence"] <= 100
+        assert 0 <= data["real_probability"] <= 100
+        assert 0 <= data["fake_probability"] <= 100
 
     def test_predict_rejects_invalid_extension(self, client, invalid_file):
         """Test prediction rejects invalid file extensions"""
@@ -186,16 +215,27 @@ class TestClearPredictions:
 
     def test_clear_predictions_returns_200(self, client):
         """Test clear predictions endpoint returns 200"""
-        response = client.delete("/api/v1/predictions/clear")
+        response = client.delete(
+            "/api/v1/predictions/clear",
+            headers={"X-Admin-Token": "test-clear-token"},
+        )
         assert response.status_code == status.HTTP_200_OK
 
     def test_clear_predictions_returns_count(self, client):
         """Test clear predictions returns deleted count"""
-        response = client.delete("/api/v1/predictions/clear")
+        response = client.delete(
+            "/api/v1/predictions/clear",
+            headers={"X-Admin-Token": "test-clear-token"},
+        )
         data = response.json()
 
         assert "deleted_count" in data
         assert data["deleted_count"] >= 0
+
+    def test_clear_predictions_requires_token(self, client):
+        """Test clear predictions endpoint enforces admin token"""
+        response = client.delete("/api/v1/predictions/clear")
+        assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
 
 class TestIntegration:
@@ -242,7 +282,10 @@ class TestIntegration:
         )
 
         # Clear predictions
-        client.delete("/api/v1/predictions/clear")
+        client.delete(
+            "/api/v1/predictions/clear",
+            headers={"X-Admin-Token": "test-clear-token"},
+        )
 
         # Check stats are reset
         stats = client.get("/api/v1/statistics").json()

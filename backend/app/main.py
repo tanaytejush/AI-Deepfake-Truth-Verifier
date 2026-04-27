@@ -3,20 +3,22 @@ FastAPI Main Application
 Optimized for production use
 """
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Depends
+from fastapi import FastAPI, File, UploadFile, HTTPException, Depends, Request, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from PIL import Image
 import io
 import logging
 from pathlib import Path
-from typing import List, Dict
+from typing import List, Dict, Optional
 import time
+import uuid
 
 from .config import settings
 from .ml.model_loader import get_model, ModelLoader
 from .database import get_db, SessionLocal, Prediction, init_db
 from .video_processor import VideoProcessor, save_upload_to_temp, cleanup_temp_file
+from .rate_limiter import rate_limiter
 from sqlalchemy.orm import Session
 
 # Setup logging
@@ -41,6 +43,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_request_context(request: Request, call_next):
+    """
+    Add request correlation ID and structured latency logging.
+    """
+    request_id = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+    client_ip = request.client.host if request.client else "unknown"
+    start = time.perf_counter()
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        logger.exception(
+            "request_failed method=%s path=%s status=%s duration_ms=%s client_ip=%s request_id=%s",
+            request.method,
+            request.url.path,
+            500,
+            duration_ms,
+            client_ip,
+            request_id,
+        )
+        raise
+
+    duration_ms = round((time.perf_counter() - start) * 1000, 2)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_complete method=%s path=%s status=%s duration_ms=%s client_ip=%s request_id=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+        client_ip,
+        request_id,
+    )
+    return response
 
 # Create upload directory
 UPLOAD_DIR = Path(settings.UPLOAD_DIR)
@@ -92,16 +132,38 @@ async def root():
 
 @app.get("/api/v1/health")
 async def health_check():
-    """Health check endpoint"""
-    model = get_model()
-    model_info = model.get_model_info()
-
+    """Liveness check endpoint"""
     return {
         "status": "healthy",
-        "model_loaded": model_info["is_loaded"],
-        "device": model_info["device"],
+        "service": "api",
         "timestamp": time.time()
     }
+
+
+@app.get("/api/v1/ready")
+async def readiness_check():
+    """Readiness check endpoint (models loaded and ready for inference)."""
+    try:
+        model_info = get_model().get_model_info()
+        is_ready = bool(model_info.get("is_loaded"))
+        payload = {
+            "status": "ready" if is_ready else "starting",
+            "model_loaded": is_ready,
+            "device": model_info.get("device", "unknown"),
+            "timestamp": time.time(),
+        }
+        return JSONResponse(status_code=200 if is_ready else 503, content=payload)
+    except Exception as error:
+        logger.error(f"Readiness check failed: {error}")
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "starting",
+                "model_loaded": False,
+                "device": "unknown",
+                "timestamp": time.time(),
+            },
+        )
 
 
 @app.get("/api/v1/model/info")
@@ -147,8 +209,51 @@ def validate_file(file: UploadFile, file_type: str = "image") -> str:
     return ext
 
 
+def _get_client_identifier(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    if request.client and request.client.host:
+        return request.client.host
+
+    return "unknown"
+
+
+def _enforce_rate_limit(request: Request, route_key: str, max_requests: int) -> None:
+    client_id = _get_client_identifier(request)
+    limiter_key = f"{route_key}:{client_id}"
+    allowed, retry_after = rate_limiter.check(
+        limiter_key,
+        max_requests,
+        settings.RATE_LIMIT_WINDOW_SECONDS,
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Rate limit exceeded: max {max_requests} requests every "
+                f"{settings.RATE_LIMIT_WINDOW_SECONDS}s"
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
+
+def _require_admin_clear_token(token: Optional[str]) -> None:
+    configured_token = settings.ADMIN_CLEAR_TOKEN.strip()
+    if not configured_token:
+        raise HTTPException(
+            status_code=503,
+            detail="Clear endpoint is disabled. Configure ADMIN_CLEAR_TOKEN.",
+        )
+
+    if token != configured_token:
+        raise HTTPException(status_code=401, detail="Invalid admin token")
+
+
 @app.post("/api/v1/predict")
 async def predict_image(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -162,6 +267,8 @@ async def predict_image(
         Prediction results with confidence scores
     """
     try:
+        _enforce_rate_limit(request, "predict_image", settings.RATE_LIMIT_IMAGE_PER_WINDOW)
+
         # Validate file
         validate_file(file, "image")
 
@@ -227,6 +334,7 @@ async def predict_image(
 
 @app.post("/api/v1/predict/video")
 async def predict_video(
+    request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -242,6 +350,8 @@ async def predict_video(
     temp_file_path = None
 
     try:
+        _enforce_rate_limit(request, "predict_video", settings.RATE_LIMIT_VIDEO_PER_WINDOW)
+
         # Validate file
         ext = validate_file(file, "video")
 
@@ -303,6 +413,17 @@ async def predict_video(
             frame_predictions,
             method="confidence_weighted"
         )
+
+        # Carry fake_type from the frame most confident about being fake
+        if aggregated["prediction"] == "FAKE":
+            top_frame = max(frame_predictions, key=lambda r: r.get("fake_probability", 0))
+            aggregated["fake_type"]        = top_frame.get("fake_type")
+            aggregated["fake_type_detail"] = top_frame.get("fake_type_detail")
+            aggregated["fake_tags"]        = top_frame.get("fake_tags", [])
+        else:
+            aggregated["fake_type"]        = None
+            aggregated["fake_type_detail"] = None
+            aggregated["fake_tags"]        = []
 
         # Add metadata
         total_time = time.time() - start_time
@@ -416,9 +537,13 @@ async def get_statistics(db: Session = Depends(get_db)):
 
 
 @app.delete("/api/v1/predictions/clear")
-async def clear_predictions(db: Session = Depends(get_db)):
+async def clear_predictions(
+    db: Session = Depends(get_db),
+    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+):
     """Clear all predictions (use with caution)"""
     try:
+        _require_admin_clear_token(x_admin_token)
         count = db.query(Prediction).delete()
         db.commit()
 
@@ -427,6 +552,8 @@ async def clear_predictions(db: Session = Depends(get_db)):
             "deleted_count": count
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         logger.error(f"Error clearing predictions: {e}")

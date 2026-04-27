@@ -11,6 +11,7 @@ import os
 import logging
 from typing import List, Dict, Tuple
 from pathlib import Path
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,11 @@ class VideoProcessor:
 
             logger.info(f"Video info: {total_frames} frames, {fps:.2f} FPS, {duration:.2f}s")
 
+            # Adaptive sample rate: always extract at least 10 frames from short videos
+            target_frames = min(self.max_frames, max(10, total_frames // self.frame_sample_rate))
+            adaptive_rate = max(1, total_frames // target_frames)
+            logger.info(f"Adaptive sampling: 1 frame every {adaptive_rate} frames → ~{target_frames} frames")
+
             frame_idx = 0
             extracted_count = 0
 
@@ -63,8 +69,8 @@ class VideoProcessor:
                 if not ret:
                     break
 
-                # Sample frames at specified rate
-                if frame_idx % self.frame_sample_rate == 0:
+                # Sample frames at adaptive rate
+                if frame_idx % adaptive_rate == 0:
                     # Convert BGR to RGB
                     frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
@@ -91,6 +97,8 @@ class VideoProcessor:
 
         return frames
 
+    FAKE_THRESHOLD = settings.VIDEO_PREDICTION_THRESHOLD
+
     def aggregate_predictions(
         self,
         predictions: List[Dict],
@@ -116,71 +124,97 @@ class VideoProcessor:
         else:
             raise ValueError(f"Unknown aggregation method: {method}")
 
+    def _aggregate_per_model(self, predictions: List[Dict]) -> List[Dict]:
+        """Average per-model probabilities across all frames."""
+        if not predictions or "per_model" not in predictions[0]:
+            return []
+
+        model_keys = [m["model"] for m in predictions[0]["per_model"]]
+        result = []
+        for i, key in enumerate(model_keys):
+            fake_probs = [p["per_model"][i]["fake_prob"] for p in predictions if len(p.get("per_model", [])) > i]
+            real_probs = [p["per_model"][i]["real_prob"] for p in predictions if len(p.get("per_model", [])) > i]
+            if not fake_probs:
+                continue
+            avg_fake = float(np.mean(fake_probs))
+            avg_real = float(np.mean(real_probs))
+            entry = dict(predictions[0]["per_model"][i])
+            entry["fake_prob"] = round(avg_fake, 1)
+            entry["real_prob"] = round(avg_real, 1)
+            result.append(entry)
+        return result
+
     def _majority_vote(self, predictions: List[Dict]) -> Dict:
         """Aggregate using majority voting"""
         fake_count = sum(1 for p in predictions if p["prediction"] == "FAKE")
         real_count = len(predictions) - fake_count
 
-        prediction = "FAKE" if fake_count > real_count else "REAL"
+        avg_fake_prob = float(np.mean([p["fake_probability"] for p in predictions])) / 100
+        avg_real_prob = float(np.mean([p["real_probability"] for p in predictions])) / 100
 
-        # Calculate average probabilities
-        avg_fake_prob = np.mean([p["fake_probability"] for p in predictions])
-        avg_real_prob = np.mean([p["real_probability"] for p in predictions])
+        # Normalize
+        total = avg_fake_prob + avg_real_prob
+        avg_fake_prob /= total
+        avg_real_prob /= total
 
-        confidence = max(avg_fake_prob, avg_real_prob)
+        prediction = "FAKE" if avg_fake_prob >= self.FAKE_THRESHOLD else "REAL"
+        confidence = max(avg_fake_prob, avg_real_prob) * 100
 
         return {
             "prediction": prediction,
-            "confidence": float(confidence),
-            "real_probability": float(avg_real_prob),
-            "fake_probability": float(avg_fake_prob),
+            "confidence": round(confidence, 2),
+            "real_probability": round(avg_real_prob * 100, 2),
+            "fake_probability": round(avg_fake_prob * 100, 2),
             "frames_analyzed": len(predictions),
             "fake_frames": fake_count,
             "real_frames": real_count,
-            "aggregation_method": "majority_vote"
+            "aggregation_method": "majority_vote",
+            "per_model": self._aggregate_per_model(predictions),
         }
 
     def _confidence_weighted(self, predictions: List[Dict]) -> Dict:
         """
-        Aggregate using confidence-weighted averaging
-
-        Higher confidence predictions have more influence
+        Aggregate using confidence-weighted averaging.
+        Higher confidence predictions have more influence.
         """
-        # Calculate weighted averages
         total_weight = sum(p["confidence"] for p in predictions)
 
-        # Fallback to simple average if total weight is zero
         if total_weight == 0:
             return self._majority_vote(predictions)
 
         weighted_fake_prob = sum(
-            p["fake_probability"] * p["confidence"]
+            (p["fake_probability"] / 100) * p["confidence"]
             for p in predictions
         ) / total_weight
 
         weighted_real_prob = sum(
-            p["real_probability"] * p["confidence"]
+            (p["real_probability"] / 100) * p["confidence"]
             for p in predictions
         ) / total_weight
 
-        # Determine prediction
-        prediction = "FAKE" if weighted_fake_prob > weighted_real_prob else "REAL"
-        confidence = max(weighted_fake_prob, weighted_real_prob)
+        # Normalize
+        total = weighted_fake_prob + weighted_real_prob
+        weighted_fake_prob /= total
+        weighted_real_prob /= total
 
-        # Count frames by prediction
+        # Apply same 55% threshold as image predictions
+        prediction = "FAKE" if weighted_fake_prob >= self.FAKE_THRESHOLD else "REAL"
+        confidence = max(weighted_fake_prob, weighted_real_prob) * 100
+
         fake_count = sum(1 for p in predictions if p["prediction"] == "FAKE")
         real_count = len(predictions) - fake_count
 
         return {
             "prediction": prediction,
-            "confidence": float(confidence),
-            "real_probability": float(weighted_real_prob),
-            "fake_probability": float(weighted_fake_prob),
+            "confidence": round(confidence, 2),
+            "real_probability": round(weighted_real_prob * 100, 2),
+            "fake_probability": round(weighted_fake_prob * 100, 2),
             "frames_analyzed": len(predictions),
             "fake_frames": fake_count,
             "real_frames": real_count,
             "aggregation_method": "confidence_weighted",
-            "average_frame_confidence": float(np.mean([p["confidence"] for p in predictions]))
+            "average_frame_confidence": round(float(np.mean([p["confidence"] for p in predictions])), 2),
+            "per_model": self._aggregate_per_model(predictions),
         }
 
     def get_video_info(self, video_path: str) -> Dict:

@@ -7,6 +7,7 @@ function History() {
   const [predictions, setPredictions] = useState([])
   const [loading, setLoading] = useState(true)
   const [offline, setOffline] = useState(false)
+  const adminClearToken = import.meta.env.VITE_ADMIN_CLEAR_TOKEN
 
   const fetchHistory = async () => {
     setLoading(true)
@@ -33,14 +34,19 @@ function History() {
     }
 
     try {
-      await fetch('/api/v1/predictions/clear', {
-        method: 'DELETE'
+      const response = await fetch('/api/v1/predictions/clear', {
+        method: 'DELETE',
+        headers: adminClearToken ? { 'X-Admin-Token': adminClearToken } : {},
       })
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}))
+        throw new Error(errorPayload?.detail || 'Failed to clear history')
+      }
       setPredictions([])
       toast.success('History cleared')
     } catch (error) {
       console.error('Failed to clear history:', error)
-      toast.error('Failed to clear history')
+      toast.error(error.message || 'Failed to clear history')
     }
   }
 

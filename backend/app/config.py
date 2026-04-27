@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     # Video Processing Settings
     VIDEO_FRAME_SAMPLE_RATE: int = 30  # Extract 1 frame every 30 frames
     VIDEO_MAX_FRAMES: int = 100  # Maximum frames to analyze per video
-    VIDEO_PREDICTION_THRESHOLD: float = 0.7  # Confidence threshold for aggregation
+    VIDEO_PREDICTION_THRESHOLD: float = 0.55  # Confidence threshold for aggregation
 
     # File Upload Settings
     UPLOAD_DIR: Path = Path("./uploads")
@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     # Performance
     MAX_CONCURRENT_REQUESTS: int = 5
     REQUEST_TIMEOUT: int = 30  # seconds
+
+    # Security
+    ADMIN_CLEAR_TOKEN: str = ""
+
+    # Rate limiting (per client IP per endpoint)
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_IMAGE_PER_WINDOW: int = 20
+    RATE_LIMIT_VIDEO_PER_WINDOW: int = 5
 
     class Config:
         env_file = ".env"
