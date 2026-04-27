@@ -1,13 +1,3 @@
----
-title: AI Deepfake Truth Verifier
-emoji: 🔍
-colorFrom: purple
-colorTo: blue
-sdk: docker
-app_port: 7860
-pinned: false
----
-
 # AI Deepfake Truth Verifier
 
 An AI-powered deepfake and synthetic image/video detection system built with Vision Transformers and an ensemble of 3 specialized models.
