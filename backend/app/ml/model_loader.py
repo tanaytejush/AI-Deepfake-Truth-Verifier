@@ -13,6 +13,7 @@ import time
 from functools import lru_cache
 
 from ..config import settings
+from ..disagreement import build_disagreement_summary
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,15 @@ class ModelLoader:
                 for r in results
             ],
         }
+
+        result.update(
+            build_disagreement_summary(
+                results=results,
+                prediction=prediction,
+                avg_fake_probability=result["fake_probability"],
+                avg_real_probability=result["real_probability"],
+            )
+        )
 
         for r in results:
             logger.info(f"   ↳ {r['model'].split('/')[-1]}: fake={r['fake_prob']*100:.1f}% real={r['real_prob']*100:.1f}%")

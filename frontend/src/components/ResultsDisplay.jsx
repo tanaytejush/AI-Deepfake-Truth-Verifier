@@ -79,6 +79,7 @@ function ResultsDisplay({ result, loading }) {
   if (!result) return null
 
   const isFake = result.prediction === 'FAKE'
+  const isUncertain = result.prediction_state === 'UNCERTAIN'
   const Icon = isFake ? FiAlertTriangle : FiCheckCircle
   const accentColor = isFake ? '#ef4444' : '#22c55e'
   const glowColor   = isFake ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'
@@ -150,6 +151,35 @@ function ResultsDisplay({ result, loading }) {
           >
             {result.prediction}
           </motion.h2>
+
+          {isUncertain && (
+            <motion.div
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              style={{
+                marginTop: 12,
+                padding: '8px 12px',
+                borderRadius: 999,
+                border: '1px solid rgba(245,158,11,0.35)',
+                background: 'rgba(245,158,11,0.10)',
+                color: '#fbbf24',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: 12,
+                fontWeight: 700,
+              }}
+            >
+              <FiAlertTriangle style={{ fontSize: 12 }} />
+              Mixed Signals
+              {typeof result.disagreement_score === 'number' && (
+                <span style={{ color: '#fde68a', fontWeight: 600 }}>
+                  {result.disagreement_score.toFixed(0)}%
+                </span>
+              )}
+            </motion.div>
+          )}
         </div>
 
         {/* ── Fake type badge + detail ── */}
@@ -197,7 +227,7 @@ function ResultsDisplay({ result, loading }) {
         )}
 
         {/* ── Real image description ── */}
-        {!isFake && (
+        {!isFake && !isUncertain && (
           <motion.p
             style={{ fontSize: 13, color: '#6b7280', textAlign: 'center', margin: 0 }}
             initial={{ opacity: 0 }}
@@ -206,6 +236,50 @@ function ResultsDisplay({ result, loading }) {
           >
             {`This ${result.frames_analyzed ? 'video' : 'image'} appears to be authentic`}
           </motion.p>
+        )}
+
+        {isUncertain && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            style={{
+              borderRadius: 12,
+              border: '1px solid rgba(245,158,11,0.18)',
+              background: 'rgba(245,158,11,0.06)',
+              padding: '12px 14px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <FiInfo style={{ color: '#fbbf24', fontSize: 13, flexShrink: 0 }} />
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#fde68a' }}>
+                Ensemble disagreement detected
+              </span>
+            </div>
+            <p style={{ fontSize: 11, color: '#d1d5db', lineHeight: 1.6, margin: 0 }}>
+              The model verdict is preserved for compatibility, but the vote split or confidence spread
+              suggests this result should be treated as uncertain.
+            </p>
+            {Array.isArray(result.uncertain_reason) && result.uncertain_reason.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {result.uncertain_reason.map(reason => (
+                  <span
+                    key={reason}
+                    style={{
+                      fontSize: 10,
+                      padding: '3px 8px',
+                      borderRadius: 999,
+                      background: 'rgba(245,158,11,0.12)',
+                      color: '#fde68a',
+                      border: '1px solid rgba(245,158,11,0.18)',
+                    }}
+                  >
+                    {reason}
+                  </span>
+                ))}
+              </div>
+            )}
+          </motion.div>
         )}
 
         {/* ── Per-model breakdown ── */}

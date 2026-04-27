@@ -61,6 +61,7 @@ npm run dev
 - Rate limiting is enabled for prediction endpoints:
   - Default backend is in-memory
   - Optional Redis backend: set `RATE_LIMIT_BACKEND=redis` and `REDIS_URL`
+- Mixed-signals handling: the API can now add `prediction_state=UNCERTAIN` and disagreement metadata without changing the main verdict.
 - Default local backend port is `8001`.
 
 ## Ensemble Models

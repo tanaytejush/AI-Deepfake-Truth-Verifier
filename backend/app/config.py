@@ -58,6 +58,11 @@ class Settings(BaseSettings):
     VIDEO_MAX_FRAMES: int = 100  # Maximum frames to analyze per video
     VIDEO_PREDICTION_THRESHOLD: float = 0.55  # Confidence threshold for aggregation
 
+    # Disagreement handling
+    DISAGREEMENT_MINORITY_VOTE_RATIO: float = 0.75
+    DISAGREEMENT_NEAR_THRESHOLD_MARGIN: float = 15.0
+    DISAGREEMENT_STRONG_OPPOSITION_THRESHOLD: float = 90.0
+
     # File Upload Settings
     UPLOAD_DIR: Path = Path("./uploads")
     MAX_UPLOAD_SIZE: int = 10 * 1024 * 1024  # 10MB
