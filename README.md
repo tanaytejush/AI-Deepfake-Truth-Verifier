@@ -43,3 +43,8 @@ docker compose up --build
 ```
 
 Model weights are downloaded automatically on first run. See `/docs` for the full API reference and confidence threshold configuration.
+
+
+---
+
+<sub>Made by [tanaytejush](https://github.com/tanaytejush)</sub>
